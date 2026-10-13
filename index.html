@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de Chat WhatsApp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #efeae2;
+            --message-sent: #d9fdd3;
+            --message-received: #ffffff;
+            --header-color: #111b21;
+            --text-color: #111b21;
+            --secondary-text: #667781;
+            --accent-color: #00a884;
+            --shadow-sm: 0 1px 2px rgba(11,20,26,0.08);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            --chat-font-size: 14px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow-x: hidden;
+        }
+
+        /* ===== UPLOAD ===== */
+        #upload-area {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(239,234,226,0.92); backdrop-filter: blur(10px);
+            z-index: 2000; transition: opacity 0.4s ease;
+        }
+        .upload-card {
+            background: white; padding: 44px 40px; border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.12); text-align: center;
+            display: flex; flex-direction: column; align-items: center; gap: 16px;
+            max-width: 90%; width: 420px;
+        }
+        .upload-card h2 { font-size: 22px; color: var(--header-color); }
+        .upload-card p { font-size: 13px; color: var(--secondary-text); line-height: 1.5; }
+        .btn-importar {
+            background: var(--accent-color); color: white; padding: 14px 30px;
+            border-radius: 30px; cursor: pointer; font-weight: 600; font-size: 15px;
+            box-shadow: 0 4px 14px rgba(0,168,132,0.35); border: none;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+            display: inline-flex; align-items: center; gap: 10px;
+        }
+        .btn-importar:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,168,132,0.45); background: #009877; }
+        #file-input { display: none; }
+
+        /* ===== CHAT ===== */
+        #chat-container {
+            max-width: 860px; margin: 0 auto;
+            display: flex; flex-direction: column;
+            padding: 30px 18px 70px;
+        }
+
+        /* ===== DATE INDICATOR ===== */
+        #date-indicator {
+            position: fixed; top: 18px; left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            z-index: 1000; background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(5px); padding: 7px 16px;
+            border-radius: 20px; font-size: 12px; font-weight: 600;
+            color: var(--secondary-text); box-shadow: var(--shadow-md);
+            opacity: 0; transition: all 0.3s ease; pointer-events: none;
+        }
+        #date-indicator.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        /* ===== BUBBLES ===== */
+        .message-wrapper { display: flex; width: 100%; margin-bottom: 10px; }
+        .message-wrapper.sent { justify-content: flex-end; }
+        .message {
+            max-width: 75%; min-width: 80px; padding: 6px 7px 8px;
+            border-radius: 12px; box-shadow: var(--shadow-sm);
+            display: flex; flex-direction: column; animation: fadeIn 0.25s ease;
+            position: relative;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        .sent .message { background-color: var(--message-sent); border-top-right-radius: 0; }
+        .received .message { background-color: var(--message-received); border-top-left-radius: 0; }
+
+        .msg-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-bottom: 2px; margin-bottom: 4px; gap: 8px;
+        }
+        .sender { font-weight: 600; font-size: 12px; color: #007a5e; border-radius: 4px; padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .msg-content { font-size: var(--chat-font-size); line-height: 1.45; color: var(--text-color); display: flex; flex-direction: column; position: relative; }
+        .msg-text { white-space: pre-wrap; word-break: break-word; padding: 0 4px; margin-bottom: 4px; font-size: var(--chat-font-size); }
+        .msg-footer { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 4px; padding-right: 2px; align-self: flex-end; position: relative; z-index: 2; pointer-events: none; }
+        .time-text { font-size: 11px; color: var(--secondary-text); white-space: nowrap; font-weight: 500; }
+        .date-text { font-size: 10px; color: var(--secondary-text); opacity: 0.8; margin-right: 4px; }
+
+        /* ===== SYSTEM MSG ===== */
+        .system-msg {
+            align-self: center; background: rgba(255,255,255,0.82);
+            backdrop-filter: blur(4px); font-size: 11.5px; padding: 7px 16px;
+            border-radius: 16px; margin: 14px auto; box-shadow: var(--shadow-sm);
+            color: var(--secondary-text); font-weight: 500; text-align: center; max-width: 85%;
+        }
+
+        /* ===== CALL MSG ===== */
+        .call-bubble {
+            display: flex; align-items: center; gap: 12px;
+            background: rgba(0,168,132,0.07); border: 1px solid rgba(0,168,132,0.2);
+            border-radius: 10px; padding: 10px 14px;
+        }
+        .call-bubble-icon {
+            width: 38px; height: 38px; border-radius: 50%;
+            background: var(--accent-color);
+            display: flex; justify-content: center; align-items: center;
+            flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,168,132,0.3);
+        }
+        .call-bubble-icon svg { width: 18px; height: 18px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .call-bubble-info { display: flex; flex-direction: column; gap: 2px; }
+        .call-bubble-title { font-weight: 600; font-size: 13.5px; color: var(--header-color); }
+        .call-bubble-sub { font-size: 11px; color: var(--secondary-text); }
+
+        /* ===== MEDIA ===== */
+        .msg-content img, .msg-content video {
+            max-width: 100%; border-radius: 8px; display: block; margin-bottom: 4px;
+            border: 1px solid rgba(0,0,0,0.05); cursor: pointer; transition: filter 0.2s;
+        }
+        .msg-content img:hover { filter: brightness(0.93); }
+        .msg-caption { font-size: var(--chat-font-size); padding: 4px 5px 12px; line-height: 1.4; word-break: break-word; }
+        audio { width: 100%; max-width: 280px; height: 38px; margin-bottom: 8px; }
+
+        .file-box {
+            background: rgba(0,0,0,0.04); border-radius: 8px; padding: 11px 14px;
+            margin-bottom: 5px; display: flex; align-items: center; gap: 13px;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .file-box:hover { background: rgba(0,0,0,0.08); }
+        .file-icon { font-size: 26px; background: white; padding: 7px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .file-info { display: flex; flex-direction: column; flex: 1; }
+        .file-name { font-size: 13px; font-weight: 500; color: #036db7; line-height: 1.5; white-space: normal; word-break: break-word; display: block; }
+        .file-sub { font-size: 11px; color: var(--secondary-text); margin-top: 2px; }
+
+        /* ===== MODAL ===== */
+        .modal {
+            display: none; position: fixed; z-index: 3000; left: 0; top: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.87); backdrop-filter: blur(8px);
+            justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s ease;
+        }
+        .modal.show { display: flex; opacity: 1; }
+        .modal-close {
+            position: absolute; top: 18px; right: 18px; color: rgba(255,255,255,0.8); cursor: pointer; z-index: 3001;
+            background: rgba(0,0,0,0.5); width: 42px; height: 42px;
+            display: flex; justify-content: center; align-items: center;
+            border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(4px); transition: all 0.2s;
+        }
+        .modal-close svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .modal-close:hover { transform: scale(1.07); color: white; background: rgba(0,0,0,0.8); }
+        #modal-content-container {
+            max-width: 95%; max-height: 95%;
+            display: flex; justify-content: center; align-items: center; position: relative;
+        }
+        #modal-content-container img, #modal-content-container video {
+            max-width: 100%; max-height: 90vh; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); object-fit: contain;
+        }
+        #modal-content-container iframe {
+            width: 85vw; height: 85vh; border-radius: 12px;
+            background: white; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .modal-toolbar { position: absolute; top: 18px; left: 28px; z-index: 3001; }
+        .modal-btn-download {
+            background: var(--accent-color); color: white; border: none;
+            padding: 9px 18px; border-radius: 20px; font-weight: 600; cursor: pointer;
+            font-size: 13px; display: flex; align-items: center; gap: 7px;
+            text-decoration: none; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .modal-btn-download:hover { background: #009877; }
+
+        /* ===== CONTROLS ===== */
+        #top-controls {
+            position: fixed; top: 18px; right: 28px; z-index: 1500;
+            display: flex; align-items: center; gap: 15px;
+            background: rgba(255,255,255,0.9); backdrop-filter: blur(8px);
+            padding: 8px 16px; border-radius: 30px; box-shadow: var(--shadow-md);
+            border: 1px solid rgba(0,0,0,0.05); transition: opacity 0.3s;
+            opacity: 0; pointer-events: none;
+        }
+        #top-controls.visible { opacity: 1; pointer-events: all; }
+        .control-group { display: flex; align-items: center; gap: 8px; }
+        .control-label { font-size: 11px; font-weight: 600; color: var(--secondary-text); text-transform: uppercase; letter-spacing: 0.5px; }
+        #font-slider { width: 80px; accent-color: var(--accent-color); cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="top-controls">
+    <div class="control-group">
+        <span class="control-label">Tamaño</span>
+        <input type="range" id="font-slider" min="12" max="24" value="14" oninput="updateFontSize(this.value)">
+    </div>
+    <button class="btn-importar" style="padding: 6px 12px; font-size: 12px; border-radius: 15px;" onclick="location.reload()">
+        Reiniciar
+    </button>
+</div>
+
+<div id="date-indicator">Fecha</div>
+
+<div id="upload-area">
+    <div class="upload-card">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00a884" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <h2>Visor de Chat</h2>
+        <p>Selecciona la carpeta completa exportada desde WhatsApp (contiene el .txt y los archivos multimedia).</p>
+        <label class="btn-importar" for="file-input">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Seleccionar Carpeta del Chat
+        </label>
+        <input type="file" id="file-input" webkitdirectory directory>
+    </div>
+</div>
+
+<div id="chat-container"></div>
+
+<!-- Modal -->
+<div id="file-modal" class="modal">
+    <div class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </div>
+    <div class="modal-toolbar" id="modal-toolbar"></div>
+    <div id="modal-content-container"></div>
+</div>
+
+<script>
+    // ── CONFIG ──────────────────────────────────────────────
+    const MI_NOMBRE = "Jesús Antonio Cruz";
+
+    // SVG icons for calls
+    const ICON_PHONE = `<svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 11.4 18.9a19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>`;
+    const ICON_VIDEO = `<svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>`;
+
+    // ── DATE INDICATOR ──────────────────────────────────────
+    let scrollTimeout;
+    const dateIndicator = document.getElementById('date-indicator');
+    window.addEventListener('scroll', () => {
+        if (dateIndicator.textContent !== 'Fecha') dateIndicator.classList.add('visible');
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => dateIndicator.classList.remove('visible'), 1500);
+        for (const m of document.querySelectorAll('.message-wrapper[data-fecha]')) {
+            const r = m.getBoundingClientRect();
+            if (r.top >= 0 && r.top < 260) { dateIndicator.textContent = m.getAttribute('data-fecha'); break; }
+        }
+    });
+
+    // ── MODAL ───────────────────────────────────────────────
+    function openModal(url, type, fileName) {
+        const modal = document.getElementById('file-modal');
+        const container = document.getElementById('modal-content-container');
+        const toolbar = document.getElementById('modal-toolbar');
+        container.innerHTML = '';
+        toolbar.innerHTML = `<a href="${url}" target="_blank" download="${fileName||url}" class="modal-btn-download">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Descargar / Abrir</a>`;
+        modal.classList.add('show');
+        if (type === 'image') container.innerHTML = `<img src="${url}" alt="Preview">`;
+        else if (type === 'video') container.innerHTML = `<video controls autoplay><source src="${url}"></video>`;
+        else if (type === 'document') container.innerHTML = `<iframe src="${url}"></iframe>`;
+    }
+    function closeModal() {
+        document.getElementById('file-modal').classList.remove('show');
+        setTimeout(() => {
+            document.getElementById('modal-content-container').innerHTML = '';
+            document.getElementById('modal-toolbar').innerHTML = '';
+        }, 300);
+    }
+    document.getElementById('file-modal').addEventListener('click', e => {
+        if (e.target === e.currentTarget || e.target.id === 'modal-content-container') closeModal();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    // ── FILE MAP ────────────────────────────────────────────
+    let fileMap = new Map();
+    function getFileUrl(name) {
+        return fileMap.has(name) ? URL.createObjectURL(fileMap.get(name)) : name;
+    }
+
+    document.getElementById('file-input').addEventListener('change', function(e) {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        let txtFile = null;
+        fileMap.clear();
+        for (let f of files) {
+            fileMap.set(f.name, f);
+            if (f.name.endsWith('.txt')) {
+                if (!txtFile || f.name === '_chat.txt' || f.name.toLowerCase().includes('whatsapp')) txtFile = f;
+            }
+        }
+        if (!txtFile) { alert('No se encontró ningún archivo .txt en la carpeta seleccionada.'); return; }
+        const ua = document.getElementById('upload-area');
+        ua.style.opacity = '0';
+        setTimeout(() => ua.style.display = 'none', 400);
+        const reader = new FileReader();
+        reader.onload = ev => {
+            procesarChat(ev.target.result);
+            document.getElementById('top-controls').classList.add('visible');
+        };
+        reader.readAsText(txtFile, 'UTF-8');
+    });
+
+    function updateFontSize(val) {
+        document.documentElement.style.setProperty('--chat-font-size', val + 'px');
+    }
+
+    // ── PARSE ───────────────────────────────────────────────
+    window.todosLosMensajes = [];
+    window.currentIndex = 0;
+    window.currentDay = '';
+
+    // WhatsApp line regex: date, time, then rest
+    const LINE_RE = /^(\d{1,2}\/\d{1,2}\/\d{2,4}),\s(\d{1,2}:\d{2}\s[ap]\.\s?m\.)\s-\s([\s\S]*)$/i;
+    // Invisible chars
+    const INVIS = /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
+    function clean(s) { return s.replace(INVIS, '').trim(); }
+
+    function procesarChat(texto) {
+        const container = document.getElementById('chat-container');
+        container.innerHTML = '<div style="text-align:center;padding:60px;color:var(--secondary-text);">Procesando chat…</div>';
+        setTimeout(() => {
+            const lines = texto.split('\n');
+            const validas = [];
+            for (const raw of lines) {
+                const l = clean(raw.replace(/\r$/, ''));
+                if (!l) continue;
+                if (/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)) {
+                    validas.push(l);
+                } else if (validas.length > 0) {
+                    validas[validas.length - 1] += '\n' + l;
+                }
+            }
+            window.todosLosMensajes = validas;
+            window.currentIndex = 0;
+            window.currentDay = '';
+            container.innerHTML = '';
+            renderizarSiguientes();
+        }, 50);
+    }
+
+    // ── LAZY RENDER ─────────────────────────────────────────
+    const observerCarga = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) {
+            const s = document.getElementById('sentinel');
+            if (s) { observerCarga.unobserve(s); s.remove(); }
+            setTimeout(renderizarSiguientes, 0);
+        }
+    }, { root: null, rootMargin: '400px', threshold: 0 });
+
+    function renderizarSiguientes() {
+        const container = document.getElementById('chat-container');
+        const frag = document.createDocumentFragment();
+        const hasta = Math.min(window.currentIndex + 150, window.todosLosMensajes.length);
+
+        for (let i = window.currentIndex; i < hasta; i++) {
+            const linea = window.todosLosMensajes[i];
+            const baseMatch = linea.match(LINE_RE);
+            if (!baseMatch) {
+                // orphan line → system
+                const t = clean(linea);
+                if (t) { const d = document.createElement('div'); d.className = 'system-msg'; d.textContent = t; frag.appendChild(d); }
+                continue;
+            }
+
+            const [, fecha, hora, restoRaw] = baseMatch;
+            const resto = clean(restoRaw);
+
+            // ── Date separator
+            if (fecha !== window.currentDay) {
+                window.currentDay = fecha;
+                const dd = document.createElement('div');
+                dd.className = 'system-msg';
+                dd.textContent = fecha;
+                frag.appendChild(dd);
+            }
+
+            // ── Split emisor vs mensaje
+            // Busca ':' (sin requerir espacio) para capturar también llamadas (mensaje vacío)
+            const colonIdx = resto.indexOf(':');
+            let emisor = '', mensaje = '';
+            if (colonIdx > 0 && colonIdx < 80 && !resto.startsWith('http')) {
+                emisor = clean(resto.substring(0, colonIdx));
+                mensaje = clean(resto.substring(colonIdx + 1));
+            } else {
+                // notificación de sistema (sin colon o colon muy lejos)
+                mensaje = resto;
+            }
+
+            // ── System line (no emisor)
+            if (!emisor) {
+                const d = document.createElement('div');
+                d.className = 'system-msg';
+                // Add lock icon for encryption message
+                if (mensaje.includes('cifrados de extremo a extremo')) {
+                    d.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>${mensaje}`;
+                } else {
+                    d.textContent = mensaje;
+                }
+                frag.appendChild(d);
+                continue;
+            }
+
+            // ── Message bubble
+            const esMio = emisor === MI_NOMBRE;
+            const wrapper = document.createElement('div');
+            wrapper.className = `message-wrapper ${esMio ? 'sent' : 'received'}`;
+            wrapper.setAttribute('data-fecha', fecha);
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message';
+
+            // Detect call: mensaje vacío = llamada
+            const msgLower = mensaje.toLowerCase();
+            const esLlamada = !mensaje || msgLower.includes('llamada') || msgLower.includes('videollamada');
+
+            let contenido = '';
+
+            if (esLlamada) {
+                const subtitulo = esMio ? 'Saliente' : 'Entrante';
+                contenido = `<div class="call-bubble">
+                    <div class="call-bubble-icon">${ICON_PHONE}</div>
+                    <div class="call-bubble-info">
+                        <span class="call-bubble-title">Llamada</span>
+                        <span class="call-bubble-sub">${subtitulo}</span>
+                    </div>
+                </div>`;
+            } else {
+                // Check for media attachment
+                const esAdj = mensaje.includes('(archivo adjunto)') || mensaje.includes('<adjunto:');
+                const fileM = mensaje.match(/([\w\u00C0-\u024F\-. ]+\.(jpg|jpeg|png|webp|opus|mp3|mp4|mov|wav|pdf|doc|docx|xls|xlsx))/i);
+                
+                if (esAdj && fileM) {
+                    const fn = fileM[1].trim();
+                    const ext = fileM[2].toLowerCase();
+                    const url = getFileUrl(fn);
+                    
+                    // Extract caption: remove filename and the attachment marker
+                    let caption = mensaje.replace(fn, '').replace(/\s*\(archivo adjunto\)/i,'').replace(/<adjunto:[^>]*>/i,'').trim();
+                    // Clean up any remaining leading/trailing dash or colon often found in captions
+                    caption = caption.replace(/^[:\-\s]+/, '').trim();
+                    
+                    if (['jpg','jpeg','png','webp'].includes(ext)) {
+                        contenido = `<img src="${url}" onclick="openModal('${url}','image','${fn}')">`;
+                        if (caption) contenido += `<div class="msg-caption">${caption}</div>`;
+                    } else if (['mp4','mov'].includes(ext)) {
+                        contenido = `<video controls><source src="${url}"></video>`;
+                        if (caption) contenido += `<div class="msg-caption">${caption}</div>`;
+                    } else if (['opus','mp3','wav'].includes(ext)) {
+                        contenido = `<audio controls><source src="${url}"></audio>`;
+                        if (caption) contenido += `<div class="msg-caption">${caption}</div>`;
+                    } else {
+                        const ic = ext==='pdf'?'📕':(['doc','docx'].includes(ext)?'📘':(['xls','xlsx'].includes(ext)?'📗':'📄'));
+                        contenido = `<div class="file-box" onclick="openModal('${url}','document','${fn}')">
+                            <span class="file-icon">${ic}</span>
+                            <div class="file-info">
+                                <span class="file-name">${fn}</span>
+                                <span class="file-sub">Documento ${ext.toUpperCase()} ${caption ? ' • ' + caption : ''}</span>
+                            </div></div>`;
+                    }
+                } else {
+                    // Plain text — escape HTML entities
+                    const safe = mensaje.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                    contenido = `<div class="msg-text">${safe}</div>`;
+                }
+            }
+
+            bubble.innerHTML = `
+                ${!esMio ? `<div class="msg-header"><span class="sender">${emisor}</span></div>` : ''}
+                <div class="msg-content">${contenido}</div>
+                <div class="msg-footer">
+                    <span class="date-text">${fecha}</span>
+                    <span class="time-text">${hora}</span>
+                </div>`;
+
+            wrapper.appendChild(bubble);
+            frag.appendChild(wrapper);
+        }
+
+        window.currentIndex = hasta;
+
+        if (window.currentIndex < window.todosLosMensajes.length) {
+            const sentinel = document.createElement('div');
+            sentinel.id = 'sentinel';
+            sentinel.style.cssText = 'height:40px;width:100%;margin:20px 0;text-align:center;color:var(--secondary-text);font-size:13px;';
+            sentinel.textContent = 'Cargando más mensajes…';
+            frag.appendChild(sentinel);
+        }
+
+        container.appendChild(frag);
+        if (window.currentIndex < window.todosLosMensajes.length) {
+            observerCarga.observe(document.getElementById('sentinel'));
+        }
+    }
+</script>
+</body>
+</html>
